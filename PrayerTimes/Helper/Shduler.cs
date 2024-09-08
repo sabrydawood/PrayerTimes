@@ -1,6 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Diagnostics;
 using System.Media;
-using System.Net.Http;
 using System.Text.Json;
 using System.Timers;
 
@@ -12,7 +11,6 @@ namespace PrayerTimes.Helper
         private readonly CancellationTokenSource _cancellationTokenSource;
         private Dictionary<string, string> _timings;
         private readonly System.Timers.Timer _timer;
-        private readonly System.Timers.Timer _refetchTimer;
 
         private readonly HttpClient _httpClient;
         private readonly AppDbContext _dbContext;
@@ -61,17 +59,9 @@ namespace PrayerTimes.Helper
             ScheduleTaskAtSpecificTime(TimeOfDay.Hour01Am);
             _nextPrayerLabel = nextPrayerLabel;
             _timeLeftLabel = timeLeftLabel;
-
-            // Create a timer that updates every minute (60000 ms)
-            _timer = new System.Timers.Timer(60000);
+            _timer = new System.Timers.Timer(1000);
             _timer.Elapsed += UpdateTimeLeft;
             _timer.Start();
-            // Create the refetch timer
-            _refetchTimer = new System.Timers.Timer(2000); // Refetch after 2 seconds
-            _refetchTimer.Elapsed += RefetchPrayerTimes;
-            _refetchTimer.AutoReset = false; // Only run once when triggered
-
-            // Immediately show the next prayer and time left
             UpdateTimeLeft(null, null);
         }
 
@@ -89,12 +79,8 @@ namespace PrayerTimes.Helper
                 {
                     await Task.Delay(delay, cancellationToken);
                 }
-
-                // Perform the scheduled task
                 await PerformScheduledTask();
-
-                // Schedule the next run
-                nextRunTime = nextRunTime.AddDays(1); // Schedule daily
+                nextRunTime = nextRunTime.AddDays(1);
                 delay = nextRunTime - DateTime.Now;
                 await Task.Delay(delay, cancellationToken);
             }
@@ -104,18 +90,12 @@ namespace PrayerTimes.Helper
         {
             try
             {
-                // Get the current time
                 var now = DateTime.Now;
-
-                // Find the next prayer time
                 var nextPrayer = GetNextPrayerTime(now);
-
                 if (nextPrayer != null)
                 {
-                    var nextPrayerTime = DateTime.ParseExact(nextPrayer.Value.Value, "HH:mm", null);
+                    var nextPrayerTime = DateTime.ParseExact(nextPrayer.Value.Value, "HH:mm:ss", null);
                     var timeLeft = nextPrayerTime - now;
-
-                    // Update the UI (ensure you are invoking on the UI thread)
                     if (_nextPrayerLabel.InvokeRequired)
                     {
                         _nextPrayerLabel.Invoke(new Action(() =>
@@ -127,40 +107,26 @@ namespace PrayerTimes.Helper
                     {
                         _nextPrayerLabel.Text = SlawatNames[nextPrayer.Value.Key];
                     }
-
                     if (_timeLeftLabel.InvokeRequired)
                     {
                         _timeLeftLabel.Invoke(new Action(() =>
                         {
-                            _timeLeftLabel.Text = $"{timeLeft.Hours}h {timeLeft.Minutes}m";
+                            _timeLeftLabel.Text = $"{timeLeft.Hours}h {timeLeft.Minutes}m {timeLeft.Seconds}s";
                         }));
                     }
                     else
                     {
-                        _timeLeftLabel.Text = $"{timeLeft.Hours}h {timeLeft.Minutes}m";
+                        _timeLeftLabel.Text = $"{timeLeft.Hours}h {timeLeft.Minutes}m {timeLeft.Seconds}s";
                     }
-
-                    // If the next prayer is tomorrow, handle that logic
                     if (nextPrayer.Value.Key == "Fajr (Next Day)")
                     {
-                        // Stop the 1-minute timer and only use the 2-second refetch timer
                         _timer.Stop();
-                        _refetchTimer.Start();
-                    }
-                    else
-                    {
-                        // Continue with the 1-minute timer
-                        _refetchTimer.Stop();
                     }
                 }
                 else
                 {
-                    // Handle the case where no prayer times are found (unlikely in a normal setup)
                     _nextPrayerLabel.Text = "No More prayers today Geting Next Firts Pray";
                     _timeLeftLabel.Text = "";
-
-                    // Start the 2-second refetch timer
-                    _refetchTimer.Start();
                 }
             }
             catch (Exception ex)
@@ -171,11 +137,7 @@ namespace PrayerTimes.Helper
 
         private void RefetchPrayerTimes(object sender, ElapsedEventArgs e)
         {
-            // Fetch new prayer times
-            // Replace _timings with new values from the API
             _timings = FetchPrayerTimesAsync().Result;
-
-            // Update the UI with new prayer times
             if (_nextPrayerLabel.InvokeRequired)
             {
                 _nextPrayerLabel.Invoke(new Action(() =>
@@ -190,28 +152,23 @@ namespace PrayerTimes.Helper
         }
         private KeyValuePair<string, string>? GetNextPrayerTime(DateTime now)
         {
-            // Check for any upcoming prayer times today
             foreach (var prayer in _timings)
             {
-                var prayerTime = DateTime.ParseExact(prayer.Value, "HH:mm", null);
+                var prayerTime = DateTime.ParseExact(prayer.Value, "HH:mm:ss", null);
 
                 if (now < prayerTime)
                 {
-                    // Return the next prayer if it hasn't occurred yet
                     return prayer;
                 }
             }
-
-            // If all prayers for today have passed, return Fajr for the next day
             if (_timings.TryGetValue("Fajr", out var fajrTime))
             {
-                // Parse the Fajr time for the next day
-                var nextDayFajrTime = DateTime.ParseExact(fajrTime, "HH:mm", null).AddDays(1);
+                var nextDayFajrTime = DateTime.ParseExact(fajrTime, "HH:mm:ss", null).AddDays(1);
 
-                return new KeyValuePair<string, string>("Fajr (Next Day)", nextDayFajrTime.ToString("HH:mm"));
+                return new KeyValuePair<string, string>("Fajr (Next Day)", nextDayFajrTime.ToString("HH:mm:ss"));
             }
 
-            return null; // No prayers found (though this case should never occur in a normal setup)
+            return null;
 
         }
         private DateTime GetNextRunTime(TimeOfDay timeOfDay)
@@ -221,14 +178,13 @@ namespace PrayerTimes.Helper
 
             if (now > nextRunTime)
             {
-                nextRunTime = nextRunTime.AddDays(1); // Schedule for the next day if the time has already passed
+                nextRunTime = nextRunTime.AddDays(1);
             }
             return nextRunTime;
         }
 
         private async Task PerformScheduledTask()
         {
-            // Fetch data only if it's not already fetched today
             if (_timings.Count == 0 || IsNewDay())
             {
                 _timings = await FetchPrayerTimesAsync();
@@ -275,10 +231,19 @@ namespace PrayerTimes.Helper
                     var timings = new Dictionary<string, string>();
                     foreach (var property in timingsElement.EnumerateObject())
                     {
-                        timings[property.Name] = property.Value.GetString();
+                        timings[property.Name] = $"{property.Value.GetString()}:00";
                     }
                     return timings;
                 }
+
+                //var timings = new Dictionary<string, string>();
+                //timings["Fajr"] =       "06:40:00";
+                //timings["Sunrise"] =    "06:43:00";
+                //timings["Dhuhr"] =      "06:46:00";
+                //timings["Asr"] =        "06:49:00";
+                //timings["Maghrib"] =    "06:42:00";
+                //timings["Isha"] =       "06:45:00";
+                //return timings;
                 return [];
             }
             catch (Exception ex)
@@ -290,14 +255,22 @@ namespace PrayerTimes.Helper
 
         private void CheckPrayerTimes()
         {
-            var now = DateTime.Now;
-            var currentTime = now.ToString("HH:mm");
-
-            if (_timings.ContainsValue(currentTime))
+           try
             {
-                var prayerName = _timings.FirstOrDefault(x => x.Value == currentTime).Key;
-                MessageBox.Show($"{prayerName} Time: {currentTime}");
-                PlayRingtone();
+                var now = DateTime.Now;
+                var currentTime = now.ToString("HH:mm:ss");
+                if (_timings.ContainsValue(currentTime))
+                {
+                    var prayerName = _timings.FirstOrDefault(x => x.Value == currentTime).Key;
+                    string PrayerName = SlawatNames[prayerName];
+                    string Message = $"حان الان أذان {PrayerName} من الساعة {currentTime}";
+                    MessageBox.Show(Message);
+                    PlayRingtone();
+                }
+            } 
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error: {ex.Message}");
             }
         }
 
@@ -305,17 +278,23 @@ namespace PrayerTimes.Helper
         {
             try
             {
-                // Assuming the sound file is in the root of your project and will be copied to the output directory
-                string soundFilePath = Path.Combine(Application.StartupPath, "Azan.mp3");
-
-                // Play the sound
-                SoundPlayer player = new(soundFilePath);
-                player.Play();
+               string soundFilePath = Path.Combine(Application.StartupPath, "Azan.wav");
+                using (SoundPlayer player = new SoundPlayer(soundFilePath))
+                {
+                    player.Play();
+                }
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Error playing sound: {ex.Message}");
             }
+        }
+
+        internal void Dispose()
+        {
+            _cancellationTokenSource.Cancel();
+            _cancellationTokenSource.Dispose();
+            _httpClient.Dispose();
         }
 
         private class TimeOfDay

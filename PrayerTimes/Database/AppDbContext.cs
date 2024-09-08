@@ -13,7 +13,6 @@ public class AppDbContext : DbContext
     public DbSet<SettingsEntity> Settings { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // Configure entity properties here if needed
         base.OnModelCreating(modelBuilder);
     }
 }

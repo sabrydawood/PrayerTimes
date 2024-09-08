@@ -6,13 +6,10 @@ namespace PrayerTimes
 {
     internal static class Program
     {
-        /// <summary>
-        ///  The main entry point for the application.
-        /// </summary>
         [STAThread]
          static void Main()
         {
-            StartUp.SetStartup(true); // Call this when you want to enable startup
+            StartUp.SetStartup(true);
             var services = new ServiceCollection();
             ConfigureServices(services);
 

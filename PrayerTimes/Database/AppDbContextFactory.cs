@@ -8,7 +8,7 @@ namespace PrayerTimes.Database
         public AppDbContext CreateDbContext(string[] args)
         {
             var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
-            var connString = "Data Source=Database.db"; // Ensure this matches your configuration
+            var connString = "Data Source=Database.db";
             optionsBuilder.UseSqlite(connString);
 
             return new AppDbContext(optionsBuilder.Options);

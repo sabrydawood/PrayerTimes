@@ -19,7 +19,7 @@ namespace PrayerTimes
         {
             _dbContext = dbContext;
             _httpClient = new HttpClient();
-            clockTimer = new System.Timers.Timer(1000); // 1000 ms = 1 second
+            clockTimer = new System.Timers.Timer(1000);
             clockTimer.Elapsed += SetClockTime;
             clockTimer.Start();
             InitializeComponent();
@@ -81,24 +81,23 @@ namespace PrayerTimes
                 InitializeScheduler("egypt", "cairo", "8");
             }
             trayMenu = new ContextMenuStrip();
-
-            // Create menu items
             var restoreMenuItem = new ToolStripMenuItem("Restore");
             var exitMenuItem = new ToolStripMenuItem("Exit");
             trayMenu.Items.AddRange(new[] { restoreMenuItem, exitMenuItem });
-            // Set up event handlers for menu items
             restoreMenuItem.Click += OnRestore;
             exitMenuItem.Click += OnExit;
+            string ApplicationIcon = Application.StartupPath + "\\Icon.ico";
+            Icon AppIcon = new(ApplicationIcon);
+            this.Icon = AppIcon;
+            this.ShowInTaskbar = true;
             trayIcon = new NotifyIcon
             {
-                Icon = SystemIcons.Application, // Set your icon here
+                Icon = AppIcon, 
                 ContextMenuStrip = trayMenu,
                 Visible = true
             };
-
-            // Handle the form resize event
+            trayIcon.DoubleClick += (sender, e) => OnRestore(sender, e);
             this.Resize += MainForm_Resize;
-
         }
         private void MainForm_Load(object sender, EventArgs e)
         {
@@ -148,7 +147,7 @@ namespace PrayerTimes
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             base.OnFormClosing(e);
-            //_scheduler?.Dispose();
+            _scheduler?.Dispose();
         }
         private void label1_Click(object sender, EventArgs e)
         {
@@ -178,7 +177,6 @@ namespace PrayerTimes
         }
     
         private void SaveButton_Click(object sender, EventArgs e) {
-            // Get the selected item text from the ComboBox
             ListItem? selectedCountry = ContryInput.SelectedItem as ListItem;
             ListItem? selectedCity = CityInput.SelectedItem as ListItem;
             if(selectedCountry?.Value != null && selectedCity?.Value != null)
