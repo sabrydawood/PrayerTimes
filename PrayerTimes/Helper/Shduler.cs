@@ -1,4 +1,6 @@
-﻿using System.Diagnostics;
+﻿using Microsoft.EntityFrameworkCore.Metadata.Internal;
+using System.Diagnostics;
+using System.Drawing.Printing;
 using System.Media;
 using System.Text.Json;
 using System.Timers;
@@ -6,14 +8,13 @@ using System.Timers;
 
 namespace PrayerTimes.Helper
 {
-    internal class Shduler
+    internal class Shduler : ShdulerBase
     {
         private readonly CancellationTokenSource _cancellationTokenSource;
         private Dictionary<string, string> _timings;
         private readonly System.Timers.Timer _timer;
 
         private readonly HttpClient _httpClient;
-        private readonly AppDbContext _dbContext;
         private readonly string _country;
         private readonly string _city;
         private readonly string _method;
@@ -25,9 +26,9 @@ namespace PrayerTimes.Helper
         private readonly TextBox _asrLabel;
         private readonly TextBox _maghribLabel;
         private readonly TextBox _ishaLabel;
-        private TextBox _nextPrayerLabel;
-        private TextBox _timeLeftLabel;
-        private Dictionary<string, string> SlawatNames = new();
+        private readonly TextBox _nextPrayerLabel;
+        private readonly TextBox _timeLeftLabel;
+        private readonly Dictionary<string, string> SlawatNames = [];
         public Shduler(AppDbContext dbContext, TextBox fajrLabel, TextBox sunriseLabel, TextBox dhuhrLabel, TextBox asrLabel, TextBox maghribLabel, TextBox ishaLabel, TextBox nextPrayerLabel, TextBox timeLeftLabel, string country = "egypt", string city = "cairo", string method = "8")
         {
             // Store references to the labels
@@ -45,9 +46,9 @@ namespace PrayerTimes.Helper
             _ishaLabel = ishaLabel;
 
             _cancellationTokenSource = new CancellationTokenSource();
-            _timings = new Dictionary<string, string>();
+            _timings = [];
             _httpClient = new HttpClient();
-            _dbContext = dbContext;
+            dbContext = dbContext;
             _country = country;
             _city = city;
             _method = method;
@@ -65,6 +66,29 @@ namespace PrayerTimes.Helper
             UpdateTimeLeft(null, null);
         }
 
+        //private async void ScheduleTaskAtSpecificTime(TimeOfDay timeOfDay)
+        //{
+        //    var cancellationToken = _cancellationTokenSource.Token;
+
+        //    while (!cancellationToken.IsCancellationRequested)
+        //    {
+        //        var now = DateTime.Now;
+        //        var nextRunTime = GetNextRunTime(timeOfDay);
+
+        //        var delay = nextRunTime - now;
+        //        if (delay.TotalMilliseconds > 0)
+        //        {
+        //            await Task.Delay(delay, cancellationToken);
+
+        //        }else
+        //        {
+        //        await PerformScheduledTask();
+        //        nextRunTime = nextRunTime.AddDays(1);
+        //        delay = nextRunTime - DateTime.Now;
+        //        await Task.Delay(delay, cancellationToken);
+        //        }
+        //    }
+        //}
         private async void ScheduleTaskAtSpecificTime(TimeOfDay timeOfDay)
         {
             var cancellationToken = _cancellationTokenSource.Token;
@@ -77,21 +101,24 @@ namespace PrayerTimes.Helper
                 var delay = nextRunTime - now;
                 if (delay.TotalMilliseconds > 0)
                 {
-                    await Task.Delay(delay, cancellationToken);
+                    try
+                    {
+                        await Task.Delay(delay, cancellationToken);
+                        await PerformScheduledTask();
+                    }
+                    catch (TaskCanceledException)
+                    {  
+                    }
                 }
-                await PerformScheduledTask();
-                nextRunTime = nextRunTime.AddDays(1);
-                delay = nextRunTime - DateTime.Now;
-                await Task.Delay(delay, cancellationToken);
             }
         }
 
-        private void UpdateTimeLeft(object sender, ElapsedEventArgs e)
+        private void UpdateTimeLeft(object? sender, ElapsedEventArgs? e)
         {
-            try
-            {
                 var now = DateTime.Now;
                 var nextPrayer = GetNextPrayerTime(now);
+            try
+            {
                 if (nextPrayer != null)
                 {
                     var nextPrayerTime = DateTime.ParseExact(nextPrayer.Value.Value, "HH:mm:ss", null);
@@ -100,12 +127,25 @@ namespace PrayerTimes.Helper
                     {
                         _nextPrayerLabel.Invoke(new Action(() =>
                         {
-                            _nextPrayerLabel.Text = SlawatNames[nextPrayer.Value.Key];
+                            if (SlawatNames.TryGetValue(nextPrayer.Value.Key, out var prayerName))
+                            {
+                                _nextPrayerLabel.Text = SlawatNames[nextPrayer.Value.Key];
+                            }
+                            else
+                            {
+                                _nextPrayerLabel.Text = nextPrayer.Value.Key;
+                            }
                         }));
                     }
                     else
                     {
-                        _nextPrayerLabel.Text = SlawatNames[nextPrayer.Value.Key];
+                        if (SlawatNames.TryGetValue(nextPrayer.Value.Key, out var prayerName))
+                        {
+                            _nextPrayerLabel.Text = SlawatNames[nextPrayer.Value.Key];
+                        }else
+                        {
+                        _nextPrayerLabel.Text = nextPrayer.Value.Key;
+                        }
                     }
                     if (_timeLeftLabel.InvokeRequired)
                     {
@@ -131,7 +171,14 @@ namespace PrayerTimes.Helper
             }
             catch (Exception ex)
             {
+                if (nextPrayer != null && ex.Message.Contains($"the given key '{nextPrayer.Value.Key}' was not present in the dictionary"))
+                {
+                    MessageBox.Show($"Error updating time left: {nextPrayer.Value.Key}");
+                }
+                else
+                {
                 MessageBox.Show($"Error updating time left: {ex.Message}");
+                }
             }
         }
 
@@ -171,7 +218,7 @@ namespace PrayerTimes.Helper
             return null;
 
         }
-        private DateTime GetNextRunTime(TimeOfDay timeOfDay)
+        private static DateTime GetNextRunTime(TimeOfDay timeOfDay)
         {
             var now = DateTime.Now;
             var nextRunTime = new DateTime(now.Year, now.Month, now.Day, timeOfDay.Hour, timeOfDay.Minute, 0);
@@ -270,19 +317,17 @@ namespace PrayerTimes.Helper
             } 
             catch (Exception ex)
             {
-                MessageBox.Show($"Error: {ex.Message}");
+                //MessageBox.Show($"Error: {ex.Message}");
             }
         }
 
-        private void PlayRingtone()
+        private static void PlayRingtone()
         {
             try
             {
                string soundFilePath = Path.Combine(Application.StartupPath, "Azan.wav");
-                using (SoundPlayer player = new SoundPlayer(soundFilePath))
-                {
-                    player.Play();
-                }
+                using SoundPlayer player = new(soundFilePath);
+                player.Play();
             }
             catch (Exception ex)
             {
@@ -297,19 +342,13 @@ namespace PrayerTimes.Helper
             _httpClient.Dispose();
         }
 
-        private class TimeOfDay
+        private class TimeOfDay(int hour, int minute)
         {
-            public int Hour { get; }
-            public int Minute { get; }
+            public int Hour { get; } = hour;
+            public int Minute { get; } = minute;
 
-            public TimeOfDay(int hour, int minute)
-            {
-                Hour = hour;
-                Minute = minute;
-            }
-
-            public static TimeOfDay Hour6AM = new TimeOfDay(6, 0);
-            public static TimeOfDay Hour01Am = new TimeOfDay(0, 1);
+            public static TimeOfDay Hour6AM = new(6, 0);
+            public static TimeOfDay Hour01Am = new(0, 1);
         }
     }
 }

@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using PrayerTimes.Database;
 using PrayerTimes.Entities;
 using PrayerTimes.Helper;
@@ -9,16 +8,14 @@ namespace PrayerTimes
     public partial class MainForm : Form
     {
         private readonly AppDbContext _dbContext;
-        private readonly HttpClient _httpClient;
-        private System.Timers.Timer clockTimer;
-        private NotifyIcon trayIcon;
-        private ContextMenuStrip trayMenu;
+        private readonly System.Timers.Timer clockTimer;
+        private readonly NotifyIcon trayIcon;
+        private readonly ContextMenuStrip trayMenu;
         private Shduler _scheduler;
 
         public MainForm(AppDbContext dbContext)
         {
             _dbContext = dbContext;
-            _httpClient = new HttpClient();
             clockTimer = new System.Timers.Timer(1000);
             clockTimer.Elapsed += SetClockTime;
             clockTimer.Start();
@@ -83,7 +80,7 @@ namespace PrayerTimes
             trayMenu = new ContextMenuStrip();
             var restoreMenuItem = new ToolStripMenuItem("Restore");
             var exitMenuItem = new ToolStripMenuItem("Exit");
-            trayMenu.Items.AddRange(new[] { restoreMenuItem, exitMenuItem });
+            trayMenu.Items.AddRange([restoreMenuItem, exitMenuItem]);
             restoreMenuItem.Click += OnRestore;
             exitMenuItem.Click += OnExit;
             string ApplicationIcon = Application.StartupPath + "\\Icon.ico";
@@ -123,12 +120,18 @@ namespace PrayerTimes
         private void OnExit(object sender, EventArgs e)
         {
             trayIcon.Visible = false;
+            clockTimer.Stop();
+            clockTimer.Dispose();
             Application.Exit();
         }
         private void SetClockTime(object sender, ElapsedEventArgs e)
         {
-            this.Invoke((Action)(() => Clock.Text = DateTime.Now.ToString("hh:mm:ss tt")));
+            if (this.IsHandleCreated && !this.IsDisposed)
+            {
+                this.Invoke((Action)(() => Clock.Text = DateTime.Now.ToString("hh:mm:ss tt")));
+            }
         }
+
         private void InitializeScheduler(string contry = "egypt", string city = "cairo", string? method = "8")
         {
             var Settings = _dbContext.Settings.FirstOrDefault(g => g.Id == 1);

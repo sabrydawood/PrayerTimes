@@ -7,16 +7,14 @@ public class StartUp
     {
         string appName = "PrayerTimes";
         string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
-        using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true))
+        using RegistryKey key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
+        if (enable)
         {
-            if (enable)
-            {
-                key.SetValue(appName, exePath);
-            }
-            else
-            {
-                key.DeleteValue(appName, false);
-            }
+            key?.SetValue(appName, exePath);
+        }
+        else
+        {
+            key?.DeleteValue(appName, false);
         }
     }
  }
